@@ -1,0 +1,140 @@
+name: "Label-based Claude Code Reviewer"
+description: "PR에 붙은 라벨에 따라 리뷰 관점을 골라 Claude Code로 자동 리뷰하는 Composite Action"
+author: "haerong22"
+
+inputs:
+  github_token:
+    description: "GitHub API 토큰"
+    required: true
+  claude_code_oauth_token:
+    description: "Claude Code OAuth 토큰"
+    required: true
+
+  # --- 라벨 기반 리뷰 설정 ---
+  review_label:
+    description: "리뷰를 트리거하는 기본 라벨 이름"
+    required: false
+    default: "claude-review"
+  profile_separator:
+    description: "기본 라벨과 리뷰 프로필을 구분하는 문자 (예: claude-review:security)"
+    required: false
+    default: ":"
+  default_profile:
+    description: "프로필 없이 기본 라벨만 붙었을 때 사용할 프로필"
+    required: false
+    default: "default"
+  label_profile_map:
+    description: |
+      임의의 라벨을 프로필에 직접 매핑. `라벨=프로필` 형식으로 한 줄에 하나씩.
+      예)
+        security-audit=security
+        hotfix=quick
+    required: false
+    default: ""
+  require_label:
+    description: "true면 라벨이 없을 때 리뷰를 건너뜀. false면 라벨이 없어도 default_profile로 리뷰"
+    required: false
+    default: "true"
+  all_keyword:
+    description: "모든 리뷰 관점으로 확장되는 예약 프로필 이름 (예: claude-review:all)"
+    required: false
+    default: "all"
+  all_excludes:
+    description: "all 확장에서 제외할 프로필 (쉼표 구분). 다른 관점과 충돌하는 quick은 기본 제외"
+    required: false
+    default: "quick"
+  prompts_dir:
+    description: "커스텀 프롬프트 디렉토리 (체크아웃된 리포지토리 기준 경로). 같은 이름의 파일이 있으면 내장 프롬프트보다 우선"
+    required: false
+    default: ""
+  extra_instructions:
+    description: "모든 리뷰에 공통으로 덧붙일 추가 지침"
+    required: false
+    default: ""
+  prompt:
+    description: "전체 프롬프트를 직접 지정 (설정 시 라벨 기반 프롬프트 조립을 무시)"
+    required: false
+    default: ""
+
+  # --- Claude 실행 설정 ---
+  # 기본값은 아래 "Run Claude Code Review" 스텝의 표현식에 둔다.
+  # 여기에 두면 호출자가 빈 값을 넘겼을 때 allowedTools 가 통째로 사라져
+  # Claude 가 코멘트를 달지 못한다.
+  claude_args:
+    description: "Claude CLI 추가 인자. 비워두면 기본 allowedTools 세트가 적용된다"
+    required: false
+    default: ""
+  show_full_output:
+    description: "Claude 출력 전체 표시 여부"
+    required: false
+    default: "true"
+
+  # --- 이전 리뷰 정리 ---
+  use_sticky_comment:
+    description: "요약 코멘트를 새로 달지 않고 기존 코멘트를 덮어씀 (누적 방지)"
+    required: false
+    default: "true"
+  cleanup_inline_reviews:
+    description: "synchronize 시 이전 인라인 리뷰 스레드 삭제 여부 (사용자 답글이 달린 스레드는 보존)"
+    required: false
+    default: "true"
+  delete_delay_seconds:
+    description: "인라인 코멘트 삭제 시 API 호출 간 딜레이 (rate limit 방지)"
+    required: false
+    default: "0.3"
+
+outputs:
+  should_review:
+    description: "라벨 조건을 만족해 리뷰를 실행했는지 여부 (true/false)"
+    value: ${{ steps.resolve.outputs.should_review }}
+  profiles:
+    description: "적용된 리뷰 프로필 목록 (쉼표 구분)"
+    value: ${{ steps.resolve.outputs.profiles }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Resolve Review Profile From Labels
+      id: resolve
+      shell: bash
+      env:
+        LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        REVIEW_LABEL: ${{ inputs.review_label }}
+        PROFILE_SEPARATOR: ${{ inputs.profile_separator }}
+        DEFAULT_PROFILE: ${{ inputs.default_profile }}
+        LABEL_PROFILE_MAP: ${{ inputs.label_profile_map }}
+        REQUIRE_LABEL: ${{ inputs.require_label }}
+        ALL_KEYWORD: ${{ inputs.all_keyword }}
+        ALL_EXCLUDES: ${{ inputs.all_excludes }}
+        PROMPTS_DIR: ${{ inputs.prompts_dir }}
+        BUILTIN_PROMPTS_DIR: ${{ github.action_path }}/prompts
+        EXTRA_INSTRUCTIONS: ${{ inputs.extra_instructions }}
+        PROMPT_OVERRIDE: ${{ inputs.prompt }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      run: ${{ github.action_path }}/scripts/resolve-review.sh
+
+    # 요약 코멘트는 use_sticky_comment 로 덮어쓰므로 여기서는 인라인 스레드만 정리한다
+    - name: Cleanup Previous Inline Reviews
+      if: steps.resolve.outputs.should_review == 'true' && inputs.cleanup_inline_reviews == 'true' && github.event.action == 'synchronize'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+        DELETE_DELAY: ${{ inputs.delete_delay_seconds }}
+      run: ${{ github.action_path }}/scripts/cleanup-inline-reviews.sh
+
+    - name: Run Claude Code Review
+      if: steps.resolve.outputs.should_review == 'true'
+      uses: anthropics/claude-code-action@v1
+      with:
+        use_sticky_comment: ${{ inputs.use_sticky_comment }}
+        show_full_output: ${{ inputs.show_full_output }}
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        github_token: ${{ inputs.github_token }}
+        prompt: ${{ steps.resolve.outputs.prompt }}
+        claude_args: ${{ inputs.claude_args || '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"' }}

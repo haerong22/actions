@@ -1,0 +1,139 @@
+name: "Claude Code Review (reusable)"
+
+# 라벨 기반 코드 리뷰 job 전체를 감싼 재사용 워크플로우.
+# 소비 레포는 트리거와 호출 3줄만 작성하면 된다.
+#
+#   on:
+#     pull_request:
+#       types: [opened, reopened, synchronize, labeled]
+#   jobs:
+#     review:
+#       uses: haerong22/actions/.github/workflows/code-review.yml@v1
+#       secrets: inherit
+#
+# 스텝 단위로 끼워넣거나 세밀하게 제어해야 하면 code-reviewer composite action 을 직접 사용할 것.
+
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        description: "실행할 러너"
+        type: string
+        required: false
+        default: "ubuntu-latest"
+
+      # --- 라벨 기반 리뷰 설정 (composite action 과 동일) ---
+      review_label:
+        type: string
+        required: false
+        default: "claude-review"
+      profile_separator:
+        type: string
+        required: false
+        default: ":"
+      default_profile:
+        type: string
+        required: false
+        default: "default"
+      label_profile_map:
+        type: string
+        required: false
+        default: ""
+      require_label:
+        type: string
+        required: false
+        default: "true"
+      all_keyword:
+        type: string
+        required: false
+        default: "all"
+      all_excludes:
+        type: string
+        required: false
+        default: "quick"
+      prompts_dir:
+        type: string
+        required: false
+        default: ""
+      extra_instructions:
+        type: string
+        required: false
+        default: ""
+      prompt:
+        type: string
+        required: false
+        default: ""
+
+      # --- Claude 실행 설정 ---
+      # 비워두면 composite action 이 기본 allowedTools 를 적용한다
+      claude_args:
+        type: string
+        required: false
+        default: ""
+      show_full_output:
+        type: string
+        required: false
+        default: "true"
+
+      # --- 이전 리뷰 정리 ---
+      use_sticky_comment:
+        type: string
+        required: false
+        default: "true"
+      cleanup_inline_reviews:
+        type: string
+        required: false
+        default: "true"
+      delete_delay_seconds:
+        type: string
+        required: false
+        default: "0.3"
+
+    secrets:
+      claude_code_oauth_token:
+        description: "Claude Code OAuth 토큰. secrets: inherit 를 쓰면 CLAUDE_CODE_OAUTH_TOKEN 이 그대로 전달된다"
+        required: true
+
+    outputs:
+      should_review:
+        description: "라벨 조건을 만족해 리뷰를 실행했는지 여부"
+        value: ${{ jobs.review.outputs.should_review }}
+      profiles:
+        description: "적용된 리뷰 프로필 목록"
+        value: ${{ jobs.review.outputs.profiles }}
+
+jobs:
+  review:
+    runs-on: ${{ inputs.runs_on }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      should_review: ${{ steps.review.outputs.should_review }}
+      profiles: ${{ steps.review.outputs.profiles }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: review
+        uses: haerong22/actions/code-reviewer@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.claude_code_oauth_token }}
+          review_label: ${{ inputs.review_label }}
+          profile_separator: ${{ inputs.profile_separator }}
+          default_profile: ${{ inputs.default_profile }}
+          label_profile_map: ${{ inputs.label_profile_map }}
+          require_label: ${{ inputs.require_label }}
+          all_keyword: ${{ inputs.all_keyword }}
+          all_excludes: ${{ inputs.all_excludes }}
+          prompts_dir: ${{ inputs.prompts_dir }}
+          extra_instructions: ${{ inputs.extra_instructions }}
+          prompt: ${{ inputs.prompt }}
+          claude_args: ${{ inputs.claude_args }}
+          show_full_output: ${{ inputs.show_full_output }}
+          use_sticky_comment: ${{ inputs.use_sticky_comment }}
+          cleanup_inline_reviews: ${{ inputs.cleanup_inline_reviews }}
+          delete_delay_seconds: ${{ inputs.delete_delay_seconds }}
