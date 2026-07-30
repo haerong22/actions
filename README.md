@@ -7,11 +7,13 @@
 | 이름 | 종류 | 설명 |
 |---|---|---|
 | [code-reviewer](./code-reviewer) | Composite Action | PR 라벨에 따라 리뷰 관점을 골라 Claude Code로 자동 리뷰 |
-| [code-review.yml](./.github/workflows/code-review.yml) | Reusable Workflow | 위 액션을 job 단위로 감싼 것. 소비 레포는 8줄이면 끝 |
 
 ## 빠른 시작
 
+소비 레포에 아래 워크플로우를 추가하고 `CLAUDE_CODE_OAUTH_TOKEN` 시크릿을 등록합니다.
+
 ```yaml
+# .github/workflows/code-review.yml
 name: "Claude Code Review"
 on:
   pull_request:
@@ -20,11 +22,19 @@ on:
 
 jobs:
   review:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       contents: read
-      pull-requests: write # 생략하면 레포 기본 권한이 읽기 전용일 때 코멘트 작성이 실패합니다
-    uses: haerong22/actions/.github/workflows/code-review.yml@v1
-    secrets: inherit
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haerong22/actions/code-reviewer@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
 PR에 `claude-review` 라벨을 붙이면 리뷰가 실행됩니다.

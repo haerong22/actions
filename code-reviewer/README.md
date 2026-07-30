@@ -42,8 +42,6 @@ gh label create claude-review:all          --color 5319E7 --description "Claude 
 
 레포에 `CLAUDE_CODE_OAUTH_TOKEN` 시크릿이 등록되어 있어야 합니다.
 
-**대부분은 이걸로 충분합니다** — 재사용 워크플로우:
-
 ```yaml
 # .github/workflows/code-review.yml
 name: "Claude Code Review"
@@ -54,39 +52,27 @@ on:
 
 jobs:
   review:
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: haerong22/actions/.github/workflows/code-review.yml@v1
-    secrets: inherit
-```
-
-> **`permissions` 를 생략하지 마세요.** 재사용 워크플로우 안에도 같은 선언이 있지만,
-> 호출된 워크플로우는 권한을 **낮출 수만 있고 올릴 수는 없습니다**.
-> 레포/조직의 기본 `GITHUB_TOKEN` 권한이 읽기 전용이면 코멘트 작성이 실패합니다.
-> (Settings → Actions → General → Workflow permissions 에서 확인)
-
-리뷰 전후에 다른 스텝을 끼워야 한다면 액션을 직접 씁니다:
-
-```yaml
-jobs:
-  review:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
+      cancel-in-progress: true # 새 커밋이 오면 이전 리뷰 실행 취소
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4 # 액션에 포함되어 있지 않음
+      - uses: actions/checkout@v4 # 필수. 액션에 포함되어 있지 않음
       - uses: haerong22/actions/code-reviewer@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
-> `types` 에 **`labeled`** 가 반드시 있어야 합니다. 없으면 이미 열린 PR에 라벨을 붙여도 반응하지 않습니다.
+세 가지를 빠뜨리기 쉽습니다.
+
+- `types` 에 **`labeled`** — 없으면 이미 열린 PR에 라벨을 붙여도 반응하지 않습니다.
+- **`permissions`** — 레포 기본 `GITHUB_TOKEN` 권한이 읽기 전용이면 코멘트 작성이 실패합니다.
+  (Settings → Actions → General → Workflow permissions)
+- **`actions/checkout`** — 액션에 포함되어 있지 않아 직접 호출해야 합니다.
 
 ### 3. 리뷰 요청하기
 
