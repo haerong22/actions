@@ -3,9 +3,9 @@
 # PR 라벨을 읽어 리뷰 실행 여부와 리뷰 프롬프트를 결정한다.
 #
 # 라벨 해석 규칙 (우선순위 순)
-#   1. label_profile_map 에 명시된 라벨      -> 매핑된 프로필
-#   2. <review_label>                        -> default_profile
-#   3. <review_label><separator><profile>    -> <profile>
+#   1. label-profile-map 에 명시된 라벨      -> 매핑된 프로필
+#   2. <review-label>                        -> default-profile
+#   3. <review-label><separator><profile>    -> <profile>
 #
 # 출력 (GITHUB_OUTPUT)
 #   should_review : true/false
@@ -49,7 +49,7 @@ trim() {
 emit() {
   local name="$1" value="$2" delim
   # 값 안에 구분자와 같은 줄이 있으면 GitHub 의 출력 파싱이 깨진다.
-  # 프롬프트는 사용자 입력(extra_instructions, prompt, 프롬프트 파일)을 담으므로
+  # 프롬프트는 사용자 입력(extra-instructions, prompt, 프롬프트 파일)을 담으므로
   # 무작위 구분자를 쓰고, 그래도 겹치면 다시 뽑는다.
   delim="ghadelim_${name}_${RANDOM}${RANDOM}"
   while [[ $value == *"$delim"* ]]; do
@@ -88,7 +88,7 @@ done < <(printf '%s' "$LABELS_JSON" | jq -r 'if type == "array" then .[] else em
 echo "🏷️  PR 라벨: ${LABELS[*]:-(없음)}"
 echo "🔎 기준 라벨: '${REVIEW_LABEL}' (프로필 구분자: '${PROFILE_SEPARATOR}')"
 
-# label_profile_map 조회: `라벨=프로필` 한 줄에 하나씩
+# label-profile-map 조회: `라벨=프로필` 한 줄에 하나씩
 lookup_mapped_profile() {
   local target="$1" line key
   [ -z "$LABEL_PROFILE_MAP" ] && return 0
@@ -156,11 +156,11 @@ if [ ${#MATCHED_LABELS[@]} -eq 0 ]; then
   # 오타('True', 'ture' 등)는 "모든 PR을 리뷰"가 아니라 "건너뜀" 쪽으로 실패해야 한다.
   if [ "$REQUIRE_LABEL" != "false" ]; then
     if [ "$REQUIRE_LABEL" != "true" ]; then
-      echo "⚠️  require_label 값이 'true'/'false' 가 아닙니다: '${REQUIRE_LABEL}' — 안전하게 라벨 필수로 처리합니다."
+      echo "⚠️  require-label 값이 'true'/'false' 가 아닙니다: '${REQUIRE_LABEL}' — 안전하게 라벨 필수로 처리합니다."
     fi
     skip_review "'${REVIEW_LABEL}' 라벨이 없습니다."
   fi
-  echo "ℹ️  일치하는 라벨은 없지만 require_label=false 이므로 기본 프로필로 진행합니다."
+  echo "ℹ️  일치하는 라벨은 없지만 require-label=false 이므로 기본 프로필로 진행합니다."
   add_profile "$DEFAULT_PROFILE"
 fi
 

@@ -33,8 +33,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: haerong22/actions/code-reviewer@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
 PR에 `claude-review` 라벨을 붙이면 리뷰가 실행됩니다.
