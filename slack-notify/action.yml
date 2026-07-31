@@ -1,0 +1,128 @@
+name: "Slack Notify"
+description: "워크플로우 실행 결과를 일관된 형식으로 Slack 에 보내는 Composite Action"
+author: "haerong22"
+
+inputs:
+  slack-bot-token:
+    description: "Slack Bot Token (chat:write 스코프 필요)"
+    required: true
+  channel-id:
+    description: "보낼 채널 ID (봇이 초대되어 있어야 함)"
+    required: true
+  status:
+    description: "success / failure / cancelled / skipped / 그 외 임의 문자열"
+    required: false
+    default: "success"
+
+  # --- 메시지 내용 ---
+  title:
+    description: "헤드라인. 비우면 status 별 기본 문구(Success, Failure …)"
+    required: false
+    default: ""
+  message:
+    description: "헤드라인 아래 본문"
+    required: false
+    default: ""
+  fields:
+    description: |
+      추가 정보. `키=값` 형식으로 한 줄에 하나씩. 2열로 렌더링된다.
+      예)
+        Env=production
+        Target=payment-server
+    required: false
+    default: ""
+  links:
+    description: |
+      버튼으로 렌더링할 링크. `텍스트=URL` 형식으로 한 줄에 하나씩.
+      비우면 status 에 따라 기본 링크 (성공=커밋, 그 외=실행 로그)
+    required: false
+    default: ""
+
+  # --- 멘션 ---
+  mention:
+    description: "`here` / `channel` / `<@U123>` / `<!subteam^S123>`"
+    required: false
+    default: ""
+  mention-on:
+    description: "멘션을 붙일 status (쉼표 구분). `all` 이면 항상"
+    required: false
+    default: "failure"
+
+  # --- 동작 ---
+  notify-on:
+    description: "알림을 보낼 status (쉼표 구분). `all` 이면 항상"
+    required: false
+    default: "all"
+  include-commit:
+    description: "커밋 정보(SHA·제목)를 포함할지"
+    required: false
+    default: "true"
+  emoji:
+    description: "헤드라인 이모지 덮어쓰기. 비우면 status 별 기본값"
+    required: false
+    default: ""
+  color:
+    description: "좌측 색상 바 덮어쓰기 (예: #2EA043). 비우면 status 별 기본값"
+    required: false
+    default: ""
+  payload:
+    description: "Block Kit 페이로드를 직접 지정 (설정 시 템플릿 조립을 무시)"
+    required: false
+    default: ""
+  fail-on-error:
+    description: "Slack 전송 실패 시 스텝을 실패시킬지. 기본은 실패시키지 않음"
+    required: false
+    default: "false"
+  dry-run:
+    description: "전송하지 않고 조립된 페이로드만 로그에 출력"
+    required: false
+    default: "false"
+
+outputs:
+  sent:
+    description: "실제로 전송했는지 여부 (true/false)"
+    value: ${{ steps.notify.outputs.sent }}
+  ts:
+    description: "전송된 메시지의 타임스탬프. 스레드 답글에 사용할 수 있다"
+    value: ${{ steps.notify.outputs.ts }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Slack Notification
+      id: notify
+      shell: bash
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.slack-bot-token }}
+        CHANNEL_ID: ${{ inputs.channel-id }}
+        STATUS: ${{ inputs.status }}
+        TITLE: ${{ inputs.title }}
+        MESSAGE: ${{ inputs.message }}
+        FIELDS: ${{ inputs.fields }}
+        LINKS: ${{ inputs.links }}
+        MENTION: ${{ inputs.mention }}
+        MENTION_ON: ${{ inputs.mention-on }}
+        NOTIFY_ON: ${{ inputs.notify-on }}
+        INCLUDE_COMMIT: ${{ inputs.include-commit }}
+        EMOJI_OVERRIDE: ${{ inputs.emoji }}
+        COLOR_OVERRIDE: ${{ inputs.color }}
+        PAYLOAD_OVERRIDE: ${{ inputs.payload }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        # --- GitHub 컨텍스트 (호출부가 넘기지 않아도 되는 것들) ---
+        REPO: ${{ github.repository }}
+        SERVER_URL: ${{ github.server_url }}
+        SHA: ${{ github.sha }}
+        REF_NAME: ${{ github.ref_name }}
+        ACTOR: ${{ github.actor }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_NUMBER: ${{ github.run_number }}
+        EVENT_NAME: ${{ github.event_name }}
+        HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: ${{ github.action_path }}/scripts/notify.sh

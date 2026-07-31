@@ -7,6 +7,7 @@
 | 이름 | 종류 | 설명 |
 |---|---|---|
 | [code-reviewer](./code-reviewer) | Composite Action | PR 라벨에 따라 리뷰 관점을 골라 Claude Code로 자동 리뷰 |
+| [slack-notify](./slack-notify) | Composite Action | 워크플로우 결과를 일관된 형식으로 Slack에 전송 |
 
 ## 빠른 시작
 
