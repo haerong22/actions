@@ -1,0 +1,109 @@
+name: "PR Size Label"
+description: "PR 변경 규모를 재서 size 라벨을 자동으로 붙이는 Composite Action"
+author: "haerong22"
+
+inputs:
+  github-token:
+    description: "GitHub API 토큰 (라벨 조회·부착에 pull-requests: write 필요)"
+    required: true
+
+  label-prefix:
+    description: "라벨 접두사"
+    required: false
+    default: "size/"
+  sizes:
+    description: |
+      구간 정의. `이름=상한` 형식으로 작은 것부터 한 줄에 하나씩.
+      마지막 줄은 상한 없이 이름만 적으면 나머지 전부를 받는다.
+    required: false
+    default: |
+      XS=9
+      S=29
+      M=99
+      L=499
+      XL
+  metric:
+    description: "크기 기준. total(추가+삭제) / additions(추가만) / files(파일 수)"
+    required: false
+    default: "total"
+  exclude-paths:
+    description: |
+      크기 계산에서 제외할 경로. 셸 glob 을 한 줄에 하나씩.
+      `*` 는 `/` 도 넘어서 매칭하며, `**/x` 는 최상위의 `x` 도 포함한다.
+    required: false
+    default: |
+      **/package-lock.json
+      **/yarn.lock
+      **/pnpm-lock.yaml
+      **/Gemfile.lock
+      **/go.sum
+      **/*.lock
+
+  create-labels:
+    description: "레포에 없는 라벨을 색상과 함께 생성할지"
+    required: false
+    default: "true"
+  label-colors:
+    description: "`이름=hex` 로 라벨 색상 덮어쓰기 (예: XL=B60205)"
+    required: false
+    default: ""
+
+  fail-over:
+    description: "이 구간을 넘으면 스텝을 실패시킴 (예: XL). 비우면 실패시키지 않음"
+    required: false
+    default: ""
+  fail-on-error:
+    description: "라벨 부착 실패 시 스텝을 실패시킬지"
+    required: false
+    default: "false"
+  dry-run:
+    description: "라벨을 붙이지 않고 계산 결과만 출력"
+    required: false
+    default: "false"
+
+outputs:
+  size:
+    description: "적용된 라벨 이름 (예: size/M)"
+    value: ${{ steps.label.outputs.size }}
+  bucket:
+    description: "구간 이름 (예: M)"
+    value: ${{ steps.label.outputs.bucket }}
+  total:
+    description: "제외 후 변경 줄 수 (추가+삭제)"
+    value: ${{ steps.label.outputs.total }}
+  additions:
+    description: "제외 후 추가 줄 수"
+    value: ${{ steps.label.outputs.additions }}
+  deletions:
+    description: "제외 후 삭제 줄 수"
+    value: ${{ steps.label.outputs.deletions }}
+  files:
+    description: "제외 후 변경 파일 수"
+    value: ${{ steps.label.outputs.files }}
+  excluded-files:
+    description: "제외된 파일 수"
+    value: ${{ steps.label.outputs.excluded-files }}
+  excluded-lines:
+    description: "제외된 줄 수"
+    value: ${{ steps.label.outputs.excluded-lines }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Apply PR Size Label
+      id: label
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_PREFIX: ${{ inputs.label-prefix }}
+        SIZES: ${{ inputs.sizes }}
+        METRIC: ${{ inputs.metric }}
+        EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+        CREATE_LABELS: ${{ inputs.create-labels }}
+        LABEL_COLORS: ${{ inputs.label-colors }}
+        FAIL_OVER: ${{ inputs.fail-over }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: ${{ github.action_path }}/scripts/label.sh

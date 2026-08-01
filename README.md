@@ -8,6 +8,7 @@
 |---|---|---|
 | [code-reviewer](./code-reviewer) | Composite Action | PR 라벨에 따라 리뷰 관점을 골라 Claude Code로 자동 리뷰 |
 | [slack-notify](./slack-notify) | Composite Action | 워크플로우 결과를 일관된 형식으로 Slack에 전송 |
+| [pr-size-label](./pr-size-label) | Composite Action | PR 변경 규모를 재서 size 라벨 자동 부착 |
 
 ## 빠른 시작
 
