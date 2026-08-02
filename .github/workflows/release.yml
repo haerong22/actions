@@ -1,0 +1,101 @@
+name: "Release"
+
+# 버전 태그(v1.2.0)를 푸시하면 이동 태그(v1)를 그 커밋으로 옮기고 릴리즈를 만든다.
+#
+#   git tag v1.2.0 && git push origin v1.2.0
+#     → v1 이 v1.2.0 위치로 이동
+#     → GitHub Release 생성 (커밋 기반 노트 자동 생성)
+#
+# 손으로 `git push -f origin v1` 하는 것을 대체한다.
+# 태그 옮기기를 빼먹으면 소비 레포가 조용히 옛 코드를 쓰게 되는데, 그걸 막는 것이 목적이다.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write # 태그 푸시와 릴리즈 생성에 필요
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 기존 태그 전체가 있어야 최신 버전인지 판단할 수 있다
+
+      - name: Validate actions
+        run: |
+          # 깨진 action.yml 을 태그에 실어 보내면 모든 소비 레포가 동시에 깨진다.
+          # YAML 은 Ruby 표준 라이브러리로 검사한다 (러너에 기본 설치, 추가 설치 불필요)
+          fail=0
+          for f in */action.yml; do
+            [ -e "$f" ] || continue
+            if ruby -ryaml -e '
+              d = YAML.load_file(ARGV[0])
+              abort "not a mapping" unless d.is_a?(Hash)
+              %w[name runs].each { |k| abort "missing #{k}" unless d.key?(k) }
+            ' "$f"; then
+              echo "✅ $f"
+            else
+              echo "::error file=$f::action.yml 이 유효하지 않습니다"
+              fail=1
+            fi
+          done
+          for s in */scripts/*.sh; do
+            [ -e "$s" ] || continue
+            if ! bash -n "$s"; then
+              echo "::error file=$s::셸 문법 오류"
+              fail=1
+            fi
+            if [ ! -x "$s" ]; then
+              echo "::error file=$s::실행 권한이 없습니다 (chmod +x 후 커밋하세요)"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Move major tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # v1.2.0-beta.1 같은 프리릴리즈는 이동 태그를 옮기지 않는다
+          case "$VERSION" in
+            *-*)
+              echo "ℹ️  프리릴리즈($VERSION) 이므로 이동 태그를 옮기지 않습니다"
+              exit 0
+              ;;
+          esac
+
+          MAJOR="${VERSION%%.*}"   # v1.2.0 → v1
+
+          # 이미 더 높은 버전이 있으면 이동 태그를 뒤로 되돌리면 안 된다.
+          # 프리릴리즈 제외는 awk 로 한다 ('-' 를 grep 패턴으로 주면 옵션과 헷갈린다)
+          LATEST="$(git tag -l "${MAJOR}.*" | awk '!/-/' | sort -V | tail -1)"
+          if [ "$LATEST" != "$VERSION" ]; then
+            echo "::warning::${VERSION} 은 ${MAJOR} 계열의 최신이 아닙니다 (최신: ${LATEST}) — ${MAJOR} 를 옮기지 않습니다"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -fa "$MAJOR" -m "${MAJOR}: ${VERSION} 을 가리키는 이동 태그" "$GITHUB_SHA"
+          git push -f origin "$MAJOR"
+          echo "🏷️  ${MAJOR} → ${VERSION} (${GITHUB_SHA})"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "ℹ️  릴리즈가 이미 있습니다: $VERSION"
+            exit 0
+          fi
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$VERSION" --title "$VERSION" --generate-notes $prerelease
